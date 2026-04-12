@@ -23,44 +23,58 @@ type
     acsCompleted, acsCancelled, acsNoResult);
   //// 'Статус выполнения: 0-Начато, 1-Ожидание, 2-Закончено, 3-Отменено, 4-Без результата',
 
+  TCmcoPropType = class
+  strict private
+    FId: Integer;
+    FTypeName: String;
+    FUnitId: Variant;
+  public
+    property Id: Integer read FId write FId;
+    property TypeName: String read FTypeName write FTypeName;
+    property UnitId: Variant read FUnitId write FUnitId;
+  end;
+
+  TCmcoDiagReportMetadata = class
+  strict private
+    FActionId: Variant;
+    FActionTypeId: Variant;
+    FBundle: TBundle;
+    FDiagReport: TDiagnosticReport;
+    FOrderRespose: TOrderResponse;
+    FPropTypes: TDictionary<TObservation, TCmcoPropType>;
+    procedure SetActionId(const Value: Variant);
+    procedure SetActionTypeId(const Value: Variant);
+    procedure SetBundle(const Value: TBundle);
+    procedure SetDiagReport(const Value: TDiagnosticReport);
+    procedure SetOrderRespose(const Value: TOrderResponse);
+  public
+    constructor Create;
+    destructor Destroy; override;
+    property ActionId: Variant read FActionId write SetActionId;
+    property ActionTypeId: Variant read FActionTypeId write SetActionTypeId;
+    property Bundle: TBundle read FBundle write SetBundle;
+    property DiagReport: TDiagnosticReport read FDiagReport write SetDiagReport;
+    property OrderRespose: TOrderResponse read FOrderRespose write SetOrderRespose;
+    property PropTypes: TDictionary<TObservation, TCmcoPropType> read FPropTypes;
+  end;
 
 
   /// <summary>TCmcoDataModule
   /// модуль данных для взаимодействия с базой данных СМСО
   /// </summary>
   TCmcoSaveDataModule = class(TBaseCmcoDataModule)
-    qryActionLis: TUniQuery;
-    dsActionLis: TDataSource;
-    qryAction: TUniQuery;
-    dsAction: TDataSource;
-    qryActionType: TUniQuery;
-    dsActionType: TDataSource;
-    qryPropType: TUniQuery;
-    dsPropType: TDataSource;
-    qryUnit: TUniQuery;
-    dsUnit: TDataSource;
-    qryTest: TUniQuery;
-    dsTest: TDataSource;
-    qryActionProperty: TUniQuery;
-    dsActionProperty: TDataSource;
-    qryPropValue: TUniQuery;
-    dsPropValue: TDataSource;
     procedure DataModuleCreate(Sender: TObject);
-    procedure qryActionBeforePost(DataSet: TDataSet);
+  strict private
+    FDiagReport: TDiagnosticReport;
+    FOrderRespose: TOrderResponse;
+    function OrderId: string;
+    procedure SaveDiagReportToCmcoAction;
   private
   protected
-    FActionId: Variant;
     FBundle: TBundle;
-    FObservation: TObservation;
     FOrderResponce: TOrderResponse;
-    FReport: TDiagnosticReport;
-    procedure UpdateModifyMarkers(ADataSet: TDataSet);
     function FindDiagReport(AReference: TReference): TDiagnosticReport;
-    function FindDiagReportAction: Boolean;
-    function GetDiagReportRequestReference: string;
     function StatusTextToCmcoActionStatusValue(AStatus: String): Integer;
-    function GetMisDocumentId(AOrderId, ARequestGuid: String): Variant;
-    function OrderId: string;
     procedure SaveCompletedOrder;
     procedure SaveNotCompletedOrder;
     procedure SaveOrderResponce(AOrderResponce: TOrderResponse);
@@ -70,16 +84,22 @@ type
     procedure SaveBundle(ABundle: TBundle);
   end;
 
+  function CmcoSaveDataModule: TCmcoSaveDataModule;
+
 implementation
 
 uses
   AppStringsUnit, Lib.Options.OptionsStorageUnit,
-  Save.CmcoActionTypePrepareHelperUnit,
-  Save.CmcoActionWriterHelperUnit;
+  Lib.ThreadObjectPoolUnit, Save.MetadataUnit, Save.ActionDataUnit;
 
 {%CLASSGROUP 'System.Classes.TPersistent'}
 
 {$R *.dfm}
+
+  function CmcoSaveDataModule: TCmcoSaveDataModule;
+  begin
+    Result := ThreadObjectPool.GetOrCreateComponent<TCmcoSaveDataModule>();
+  end;
 
 resourcestring
   SCmcoActionTypeNotFound = 'В СМСО не найден тип действия для документа-направления %s';
@@ -113,51 +133,11 @@ begin
   FBundle.TryFindResourceByFullUrl<TDiagnosticReport>(AReference.Reference, Result);
 end;
 
-function TCmcoSaveDataModule.FindDiagReportAction: Boolean;
-begin
-  var vRequestGuid := GetDiagReportRequestReference;
-  qryActionLis.ReopenWithParams(['RequestUid', vRequestGuid, 'OrderId', OrderId]);
-  qryAction.ReopenWithParams(['ActionId', qryActionLis['action_id']]);
-  Result := not qryAction.IsEmpty;
-end;
-
-function TCmcoSaveDataModule.GetDiagReportRequestReference: string;
-var
-  vRequest: TList<TReference>;
-begin
-  Result := '';
-  vRequest := FReport.Request;
-  if vRequest.Count > 0 then
-  begin
-    Result := vRequest[0].Reference;
-    Result := Result.Substring(Result.IndexOf('/') + 1);
-  end
-end;
-
-function TCmcoSaveDataModule.GetMisDocumentId(AOrderId, ARequestGuid: String):
-    Variant;
-begin
-  with qryActionLis do
-  begin
-    ReopenWithParams(['OrderId', AOrderId, 'RequestUid', ARequestGuid]);
-    Result := Null;
-    if not IsEmpty then
-      Result := FieldValues['action_id'];
-    Close;
-  end;
-end;
-
 function TCmcoSaveDataModule.OrderId: string;
 begin
   Result := '';
-  if (FOrderResponce <> nil) and (FOrderResponce.Identifier.Count > 0) then
-    Result := FOrderResponce.Identifier[0].Value;
-end;
-
-procedure TCmcoSaveDataModule.qryActionBeforePost(DataSet: TDataSet);
-begin
-  inherited;
-  UpdateModifyMarkers(DataSet);
+  if (FOrderRespose <> nil) and (FOrderRespose.Identifier.Count > 0) then
+    Result := FOrderRespose.Identifier[0].Value;
 end;
 
 procedure TCmcoSaveDataModule.SaveBundle(ABundle: TBundle);
@@ -172,8 +152,19 @@ procedure TCmcoSaveDataModule.SaveCompletedOrder;
 begin
   for var vRef in FOrderResponce.Fulfillment do
   begin
-    if FBundle.TryFindResourceByFullUrl<TDiagnosticReport>(vRef.Reference, FReport) then
+    if FBundle.TryFindResourceByFullUrl<TDiagnosticReport>(vRef.Reference, FDiagReport) then
       SaveDiagReportToCmcoAction();
+  end;
+end;
+
+procedure TCmcoSaveDataModule.SaveDiagReportToCmcoAction;
+begin
+  var vMetadata := TCmcoDiagReportMetadata.Create;
+  try
+    if Metadata.TryFillCmcoMetadata(vMetadata) then
+      ActionData.SaveDiagReportToCmcoAction(vMetadata);
+  finally
+    vMetadata.Free;
   end;
 end;
 
@@ -226,18 +217,44 @@ begin
   // TODO -cMM: TCmcoSaveDataModule.UpdateBundleCmcoRecords default body inserted
 end;
 
-procedure TCmcoSaveDataModule.UpdateModifyMarkers(ADataSet: TDataSet);
-
-  Procedure UpdateField(AFieldName: String; AValue: Variant);
-  begin
-    var vField := ADataSet.FindField(AFieldName);
-    if vField <> nil then
-      ADataSet.EditFieldValues[AFieldName] := AValue;
-  end;
-
+constructor TCmcoDiagReportMetadata.Create;
 begin
-  UpdateField('modifyUser_id', UserId);
-  UpdateField('modifyDateTime', ServerDateTime);
+  inherited Create;
+  FPropTypes := TDictionary<TObservation, TCmcoPropType>.Create();
+end;
+
+destructor TCmcoDiagReportMetadata.Destroy;
+begin
+  for var vPair in FPropTypes do
+    vPair.Value.Free;
+
+  FPropTypes.Free;
+  inherited Destroy;
+end;
+
+procedure TCmcoDiagReportMetadata.SetActionId(const Value: Variant);
+begin
+  FActionId := Value;
+end;
+
+procedure TCmcoDiagReportMetadata.SetActionTypeId(const Value: Variant);
+begin
+  FActionTypeId := Value;
+end;
+
+procedure TCmcoDiagReportMetadata.SetBundle(const Value: TBundle);
+begin
+  FBundle := Value;
+end;
+
+procedure TCmcoDiagReportMetadata.SetDiagReport(const Value: TDiagnosticReport);
+begin
+  FDiagReport := Value;
+end;
+
+procedure TCmcoDiagReportMetadata.SetOrderRespose(const Value: TOrderResponse);
+begin
+  FOrderRespose := Value;
 end;
 
 end.

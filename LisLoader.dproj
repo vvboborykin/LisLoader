@@ -244,9 +244,17 @@
             <FormType>dfm</FormType>
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
-        <DCCReference Include="Save\Save.CmcoActionTypePrepareHelperUnit.pas"/>
-        <DCCReference Include="Save\Save.CmcoActionWriterHelperUnit.pas"/>
         <DCCReference Include="..\Lib\Lib.ThreadObjectPoolUnit.pas"/>
+        <DCCReference Include="Save\Save.MetadataUnit.pas">
+            <Form>Metadata</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TDataModule</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Save\Save.ActionDataUnit.pas">
+            <Form>ActionData</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TDataModule</DesignClass>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

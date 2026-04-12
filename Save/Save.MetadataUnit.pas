@@ -1,27 +1,55 @@
-﻿unit Save.CmcoActionTypePrepareHelperUnit;
+﻿unit Save.MetadataUnit;
 
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Variants, System.StrUtils,
-  Load.FHIRModel, Save.CmcoSaveDataModuleUnit, Lib.Logger.LoggerUnit;
+  System.SysUtils, System.Classes, Data.DB, MemDS, DBAccess, Uni,
+  System.StrUtils, Load.FHIRModel, System.Variants, Lib.Data.DataSetHelperUnit,
+  Lib.Logger.LoggerUnit, Lib.Data.UniConnectionHelperUnit,
+  Save.CmcoSaveDataModuleUnit, System.Generics.Collections;
 
 type
-  TCmcoActionTypePrepareHelper = class helper for TCmcoSaveDataModule
+  TMetadata = class(TDataModule)
+    qryActionType: TUniQuery;
+    dsActionType: TDataSource;
+    qryPropType: TUniQuery;
+    dsPropType: TDataSource;
+    qryUnit: TUniQuery;
+    dsUnit: TDataSource;
+    qryTest: TUniQuery;
+    dsTest: TDataSource;
+    qryActionLis: TUniQuery;
+    dsActionLis: TDataSource;
+    procedure DataModuleDestroy(Sender: TObject);
   strict private
+    FCmcoMetadata: TCmcoDiagReportMetadata;
+    FObservation: TObservation;
+    procedure AppendObservationMetadata;
+    function conMain: TUniConnection;
     procedure CreateObservationCmcoPropType;
-    function GetObservationTestId: Variant;
-    function GetObservationUnitId: Variant;
     function FindDiagReportCmcoActionType: Boolean;
     function FindObservationCmcoPropType(ATestId: Variant): Boolean;
+    function GetActionTypeId: Variant;
+    function GetObservationTestId: Variant;
+    function GetObservationUnitId: Variant;
     function PrepareCmcoActionPropertyTypes: Boolean;
     function PrepareObservationCmcoPropertyType: Boolean;
     procedure UpdateObservationPropType;
-  protected
-    function PrepareCmcoActionType: Boolean;
+    function FindDiagReportAction: Boolean;
+    function GetDiagReportRequestReference: string;
+    function OrderId: string;
+  public
+    function TryFillCmcoMetadata(ACmcoMetadata: TCmcoDiagReportMetadata): Boolean;
   end;
 
+  function Metadata: TMetadata;
+
 implementation
+
+uses
+  Lib.ThreadObjectPoolUnit;
+
+{%CLASSGROUP 'System.Classes.TPersistent'}
 
 resourcestring
   SCmcoActionTypeNotFound = 'В СМСО не найден тип действия для документа-направления %s';
@@ -36,7 +64,33 @@ resourcestring
   SNoRequestArrayInJSON = 'в JSON отсутствует массив Request';
 
 
-procedure TCmcoActionTypePrepareHelper.CreateObservationCmcoPropType;
+{$R *.dfm}
+
+  function Metadata: TMetadata;
+  begin
+    Result := ThreadObjectPool.GetOrCreateComponent<TMetadata>();
+  end;
+
+procedure TMetadata.AppendObservationMetadata;
+begin
+  var vProp := TCmcoPropType.Create;
+  vProp.Id := qryPropType['id'];
+  vProp.TypeName := qryPropType['typeName'];
+  vProp.UnitId := qryPropType['unit_id'];
+  FCmcoMetadata.PropTypes.Add(FObservation, vProp);
+end;
+
+function TMetadata.conMain: TUniConnection;
+begin
+  Result := qryActionType.Connection;
+end;
+
+procedure TMetadata.DataModuleDestroy(Sender: TObject);
+begin
+  ThreadObjectPool.RemoveObject(Self, False);
+end;
+
+procedure TMetadata.CreateObservationCmcoPropType;
 var
   vActionTypeId: Integer;
   vName: string;
@@ -105,19 +159,50 @@ begin
   end;
 end;
 
-function TCmcoActionTypePrepareHelper.FindDiagReportCmcoActionType: Boolean;
+function TMetadata.FindDiagReportAction: Boolean;
 begin
-  qryActionType.ReopenWithParams(['ActionTypeId', qryAction['actionType_id']]);
+  var vRequestGuid := GetDiagReportRequestReference;
+  qryActionLis.ReopenWithParams(['RequestUid', vRequestGuid, 'OrderId', OrderId]);
+  FCmcoMetadata.ActionId := null;
+  if not qryActionLis.IsEmpty then
+    qryActionLis['action_id'];
+  Result := FCmcoMetadata.ActionId <> null;
+  if not Result then
+    Logger.Error(SActionNotFound, [vRequestGuid]);
+end;
+
+function TMetadata.FindDiagReportCmcoActionType: Boolean;
+begin
+  qryActionType.ReopenWithParams(['ActionTypeId', FCmcoMetadata.ActionTypeId]);
   Result := not qryActionType.IsEmpty;
 end;
 
-function TCmcoActionTypePrepareHelper.FindObservationCmcoPropType(ATestId:
-    Variant): Boolean;
+function TMetadata.FindObservationCmcoPropType(ATestId: Variant): Boolean;
 begin
   Result := qryPropType.Locate('test_id', ATestId, []);
 end;
 
-function TCmcoActionTypePrepareHelper.GetObservationTestId: Variant;
+
+function TMetadata.GetActionTypeId: Variant;
+begin
+  Result := conMain.SelectScalar('SELECT actionType_id FROM Action WHERE id = :Id LIMIT 1',
+    [FCmcoMetadata.ActionId]);
+end;
+
+function TMetadata.GetDiagReportRequestReference: string;
+var
+  vRequest: TList<TReference>;
+begin
+  Result := '';
+  vRequest := FCmcoMetadata.DiagReport.Request;
+  if vRequest.Count > 0 then
+  begin
+    Result := vRequest[0].Reference;
+    Result := Result.Substring(Result.IndexOf('/') + 1);
+  end
+end;
+
+function TMetadata.GetObservationTestId: Variant;
 begin
   Result := null;
   var vCode := FObservation.CodeCoding.Code;
@@ -128,7 +213,7 @@ begin
     Logger.Error(STestNotFound, [vCode]);
 end;
 
-function TCmcoActionTypePrepareHelper.GetObservationUnitId: Variant;
+function TMetadata.GetObservationUnitId: Variant;
 
   function GetRangeBoundUnit(ABound: TRangeBound): Variant;
   begin
@@ -157,14 +242,21 @@ begin
   end;
 end;
 
-function TCmcoActionTypePrepareHelper.PrepareCmcoActionPropertyTypes: Boolean;
+function TMetadata.OrderId: string;
+begin
+  Result := '';
+  if (FCmcoMetadata.OrderRespose <> nil) and (FCmcoMetadata.OrderRespose.Identifier.Count > 0) then
+    Result := FCmcoMetadata.OrderRespose.Identifier[0].Value;
+end;
+
+function TMetadata.PrepareCmcoActionPropertyTypes: Boolean;
 var
   vObservation: TObservation;
 begin
   Result := True;
-  for var vRef in FReport.Result do
+  for var vRef in FCmcoMetadata.DiagReport.Result do
   begin
-    if FBundle.TryFindResourceByFullUrl<TObservation>(vRef.Reference, FObservation) then
+    if FCmcoMetadata.Bundle.TryFindResourceByFullUrl<TObservation>(vRef.Reference, FObservation) then
     begin
       Result := Result and PrepareObservationCmcoPropertyType();
       if not Result then
@@ -173,22 +265,21 @@ begin
   end;
 end;
 
-function TCmcoActionTypePrepareHelper.PrepareCmcoActionType: Boolean;
+function TMetadata.TryFillCmcoMetadata(ACmcoMetadata: TCmcoDiagReportMetadata):
+    Boolean;
 begin
   Result := False;
-  if not qryAction.IsEmpty then
+  FCmcoMetadata := ACmcoMetadata;
+  if FindDiagReportAction() then
   begin
     if FindDiagReportCmcoActionType() then
       Result := PrepareCmcoActionPropertyTypes()
     else
-      Logger.Error(SCmcoActionTypeNotFound, [qryAction['id']]);
-  end
-  else
-    Logger.Error(SActionNotFound, [qryAction['id']])
+      Logger.Error(SCmcoActionTypeNotFound, [FCmcoMetadata.ActionId.ToString]);
+  end;
 end;
 
-function TCmcoActionTypePrepareHelper.PrepareObservationCmcoPropertyType:
-    Boolean;
+function TMetadata.PrepareObservationCmcoPropertyType: Boolean;
 begin
   Result := False;
   var vTestId := GetObservationTestId();
@@ -199,12 +290,13 @@ begin
       CreateObservationCmcoPropType()
     else
       UpdateObservationPropType;
+    AppendObservationMetadata();
   end
   else
     Logger.Error(SRbTestNotFound, [FObservation.CodeCoding.Code])
 end;
 
-procedure TCmcoActionTypePrepareHelper.UpdateObservationPropType;
+procedure TMetadata.UpdateObservationPropType;
 begin
 
 end;
