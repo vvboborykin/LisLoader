@@ -27,7 +27,9 @@ uses
   AppStringsUnit in 'AppStringsUnit.pas',
   Lib.Logger.ConsoleLoggerUnit in '..\Lib\Logger\Lib.Logger.ConsoleLoggerUnit.pas',
   Load.CmcoLoadDataModuleUnit in 'Load\Load.CmcoLoadDataModuleUnit.pas' {CmcoLoadDataModule: TDataModule},
-  Save.CmcoActionTypePrepareHelperUnit in 'Save\Save.CmcoActionTypePrepareHelperUnit.pas';
+  Save.CmcoActionTypePrepareHelperUnit in 'Save\Save.CmcoActionTypePrepareHelperUnit.pas',
+  Save.CmcoActionWriterHelperUnit in 'Save\Save.CmcoActionWriterHelperUnit.pas',
+  Lib.ThreadObjectPoolUnit in '..\Lib\Lib.ThreadObjectPoolUnit.pas';
 
 begin
   RegisterImplementations;

@@ -245,6 +245,8 @@
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
         <DCCReference Include="Save\Save.CmcoActionTypePrepareHelperUnit.pas"/>
+        <DCCReference Include="Save\Save.CmcoActionWriterHelperUnit.pas"/>
+        <DCCReference Include="..\Lib\Lib.ThreadObjectPoolUnit.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
