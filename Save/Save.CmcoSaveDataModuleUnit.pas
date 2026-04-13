@@ -16,48 +16,12 @@ uses
   MySQLUniProvider, Data.DB, DBAccess, Uni, MemDS, Lib.Data.DataSetHelperUnit,
   Lib.Data.UniConnectionHelperUnit, System.Variants, Load.FHIRModel,
   Load.PendingOrdersUnit, Load.RESTParamsUnit, Lib.Logger.LoggerUnit,
-  System.StrUtils, System.Generics.Collections;
+  System.StrUtils, System.Generics.Collections, Save.CmcoDiagReportMetadataUnit;
 
 type
+  //// 'Статус выполнения: 0-Начато, 1-Ожидание, 2-Закончено, 3-Отменено, 4-Без результата',
   TCmcoActionStatus = (acsStarted, acsWaiting,
     acsCompleted, acsCancelled, acsNoResult);
-  //// 'Статус выполнения: 0-Начато, 1-Ожидание, 2-Закончено, 3-Отменено, 4-Без результата',
-
-  TCmcoPropType = class
-  strict private
-    FId: Integer;
-    FTypeName: String;
-    FUnitId: Variant;
-  public
-    property Id: Integer read FId write FId;
-    property TypeName: String read FTypeName write FTypeName;
-    property UnitId: Variant read FUnitId write FUnitId;
-  end;
-
-  TCmcoDiagReportMetadata = class
-  strict private
-    FActionId: Variant;
-    FActionTypeId: Variant;
-    FBundle: TBundle;
-    FDiagReport: TDiagnosticReport;
-    FOrderRespose: TOrderResponse;
-    FPropTypes: TDictionary<TObservation, TCmcoPropType>;
-    procedure SetActionId(const Value: Variant);
-    procedure SetActionTypeId(const Value: Variant);
-    procedure SetBundle(const Value: TBundle);
-    procedure SetDiagReport(const Value: TDiagnosticReport);
-    procedure SetOrderRespose(const Value: TOrderResponse);
-  public
-    constructor Create;
-    destructor Destroy; override;
-    property ActionId: Variant read FActionId write SetActionId;
-    property ActionTypeId: Variant read FActionTypeId write SetActionTypeId;
-    property Bundle: TBundle read FBundle write SetBundle;
-    property DiagReport: TDiagnosticReport read FDiagReport write SetDiagReport;
-    property OrderRespose: TOrderResponse read FOrderRespose write SetOrderRespose;
-    property PropTypes: TDictionary<TObservation, TCmcoPropType> read FPropTypes;
-  end;
-
 
   /// <summary>TCmcoDataModule
   /// модуль данных для взаимодействия с базой данных СМСО
@@ -102,17 +66,7 @@ uses
   end;
 
 resourcestring
-  SCmcoActionTypeNotFound = 'В СМСО не найден тип действия для документа-направления %s';
-  SRbTestNotFound = 'Не найден тип параметра исследования с кодом %s в таблице rbTest';
-  STestNotFound = 'Не удалось найти запись о типе параметра с кодом "%s"';
-  SActionNotFound = 'Направление с идентификатором "%s" не найдено в БД СМСО';
   SCanNotFindOrderId = 'Не удалось определить номер заказа в ответе ЛИС';
-  SMisDocumentNotFound = 'Не удалось найти документ-направление на '+
-  'диагностику с GUID "%s" в БД СМСО';
-  SForDiagResultOfOrder = 'Для результатов исследования "%s" заказа "%s" ';
-  SCanNotGetRequestGUID = 'Не удалось определить GUID запроса';
-  SNoRequestArrayInJSON = 'в JSON отсутствует массив Request';
-
 
 const
   SLisServerParamNum = 65;
@@ -160,6 +114,10 @@ end;
 procedure TCmcoSaveDataModule.SaveDiagReportToCmcoAction;
 begin
   var vMetadata := TCmcoDiagReportMetadata.Create;
+  vMetadata.Bundle := FBundle;
+  vMetadata.OrderRespose := FOrderRespose;
+  vMetadata.DiagReport := FDiagReport;
+
   try
     if Metadata.TryFillCmcoMetadata(vMetadata) then
       ActionData.SaveDiagReportToCmcoAction(vMetadata);
@@ -215,46 +173,6 @@ end;
 procedure TCmcoSaveDataModule.UpdateBundleCmcoRecords;
 begin
   // TODO -cMM: TCmcoSaveDataModule.UpdateBundleCmcoRecords default body inserted
-end;
-
-constructor TCmcoDiagReportMetadata.Create;
-begin
-  inherited Create;
-  FPropTypes := TDictionary<TObservation, TCmcoPropType>.Create();
-end;
-
-destructor TCmcoDiagReportMetadata.Destroy;
-begin
-  for var vPair in FPropTypes do
-    vPair.Value.Free;
-
-  FPropTypes.Free;
-  inherited Destroy;
-end;
-
-procedure TCmcoDiagReportMetadata.SetActionId(const Value: Variant);
-begin
-  FActionId := Value;
-end;
-
-procedure TCmcoDiagReportMetadata.SetActionTypeId(const Value: Variant);
-begin
-  FActionTypeId := Value;
-end;
-
-procedure TCmcoDiagReportMetadata.SetBundle(const Value: TBundle);
-begin
-  FBundle := Value;
-end;
-
-procedure TCmcoDiagReportMetadata.SetDiagReport(const Value: TDiagnosticReport);
-begin
-  FDiagReport := Value;
-end;
-
-procedure TCmcoDiagReportMetadata.SetOrderRespose(const Value: TOrderResponse);
-begin
-  FOrderRespose := Value;
 end;
 
 end.

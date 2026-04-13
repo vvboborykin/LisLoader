@@ -6,7 +6,8 @@ uses
   System.SysUtils, System.Classes, Data.DB, MemDS, DBAccess, Uni,
   System.StrUtils, Load.FHIRModel, System.Variants, Lib.Data.DataSetHelperUnit,
   Lib.Logger.LoggerUnit, Lib.Data.UniConnectionHelperUnit,
-  Save.CmcoSaveDataModuleUnit, System.Generics.Collections;
+  Save.CmcoSaveDataModuleUnit, System.Generics.Collections,
+  Save.CmcoDiagReportMetadataUnit;
 
 type
   TMetadata = class(TDataModule)
@@ -20,6 +21,8 @@ type
     dsTest: TDataSource;
     qryActionLis: TUniQuery;
     dsActionLis: TDataSource;
+    qryAction: TUniQuery;
+    dsAction: TDataSource;
     procedure DataModuleDestroy(Sender: TObject);
   strict private
     FCmcoMetadata: TCmcoDiagReportMetadata;
@@ -35,7 +38,7 @@ type
     function PrepareCmcoActionPropertyTypes: Boolean;
     function PrepareObservationCmcoPropertyType: Boolean;
     procedure UpdateObservationPropType;
-    function FindDiagReportAction: Boolean;
+    function FindDiagReportCmcoAction: Boolean;
     function GetDiagReportRequestReference: string;
     function OrderId: string;
   public
@@ -124,14 +127,14 @@ begin
     FieldValues['deleted'] := 0;
     FieldValues['actionType_id'] := vActionTypeId;
     FieldValues['idx'] := vNextIdx;
-    FieldValues['template_id'] := null;
+    FieldValues['template_id'] := Null;
     FieldValues['name'] := vName;
     FieldValues['shortName'] := '';
     FieldValues['descr'] := vTestCode;
     FieldValues['unit_id'] := vUnitId;
     FieldValues['typeName'] := vTypeName;
     FieldValues['valueDomain'] := '';
-    FieldValues['defaultValue'] := null;
+    FieldValues['defaultValue'] := Null;
     FieldValues['isVector'] := 0;
     FieldValues['norm'] := '';
     FieldValues['sex'] := 0;
@@ -144,13 +147,13 @@ begin
     FieldValues['defaultEvaluation'] := 3;
     FieldValues['canChangeOnlyOwner'] := 2;
     FieldValues['isActionNameSpecifier'] := 0;
-    FieldValues['laboratoryCalculator'] := null;
+    FieldValues['laboratoryCalculator'] := Null;
     FieldValues['inActionsSelectionTable'] := 0;
     FieldValues['redactorSizeFactor'] := 0;
     FieldValues['isFrozen'] := 0;
     FieldValues['typeEditable'] := 1;
     FieldValues['visibleInDR'] := 0;
-    FieldValues['userProfile_id'] := null;
+    FieldValues['userProfile_id'] := Null;
     FieldValues['userProfileBehaviour'] := 0;
     FieldValues['isRequired'] := 0;
     FieldValues['isNorm'] := 0;
@@ -159,14 +162,22 @@ begin
   end;
 end;
 
-function TMetadata.FindDiagReportAction: Boolean;
+function TMetadata.FindDiagReportCmcoAction: Boolean;
 begin
   var vRequestGuid := GetDiagReportRequestReference;
   qryActionLis.ReopenWithParams(['RequestUid', vRequestGuid, 'OrderId', OrderId]);
-  FCmcoMetadata.ActionId := null;
   if not qryActionLis.IsEmpty then
-    qryActionLis['action_id'];
-  Result := FCmcoMetadata.ActionId <> null;
+  begin
+    FCmcoMetadata.ActionId := qryActionLis['action_id'];
+    qryAction.ReopenWithParams(['ActionId', FCmcoMetadata.ActionId]);
+    FCmcoMetadata.ActionTypeId := qryAction['actionType_id'];
+  end
+  else
+  begin
+    FCmcoMetadata.ActionId := Null;
+    FCmcoMetadata.ActionTypeId := Null;
+  end;
+  Result := FCmcoMetadata.ActionId <> Null;
   if not Result then
     Logger.Error(SActionNotFound, [vRequestGuid]);
 end;
@@ -204,7 +215,7 @@ end;
 
 function TMetadata.GetObservationTestId: Variant;
 begin
-  Result := null;
+  Result := Null;
   var vCode := FObservation.CodeCoding.Code;
   qryTest.ReopenWithParams(['Code', vCode]);
   if not qryTest.IsEmpty then
@@ -217,7 +228,7 @@ function TMetadata.GetObservationUnitId: Variant;
 
   function GetRangeBoundUnit(ABound: TRangeBound): Variant;
   begin
-    Result := null;
+    Result := Null;
     if ABound.Code <> '' then
     begin
       qryUnit.ReopenWithParams(['Code', ABound.Code]);
@@ -234,9 +245,9 @@ begin
     begin
       if vRefRange.Low <> nil then
         Result := GetRangeBoundUnit(vRefRange.Low);
-      if (Result = null) and (vRefRange.High <> nil) then
+      if (Result = Null) and (vRefRange.High <> nil) then
         Result := GetRangeBoundUnit(vRefRange.High);
-      if Result <> null then
+      if Result <> Null then
         Break;
     end;
   end;
@@ -245,13 +256,12 @@ end;
 function TMetadata.OrderId: string;
 begin
   Result := '';
-  if (FCmcoMetadata.OrderRespose <> nil) and (FCmcoMetadata.OrderRespose.Identifier.Count > 0) then
-    Result := FCmcoMetadata.OrderRespose.Identifier[0].Value;
+  if (FCmcoMetadata.OrderRespose <> nil)
+    and (FCmcoMetadata.OrderRespose.Identifier.Count > 0) then
+      Result := FCmcoMetadata.OrderRespose.Identifier[0].Value;
 end;
 
 function TMetadata.PrepareCmcoActionPropertyTypes: Boolean;
-var
-  vObservation: TObservation;
 begin
   Result := True;
   for var vRef in FCmcoMetadata.DiagReport.Result do
@@ -270,7 +280,7 @@ function TMetadata.TryFillCmcoMetadata(ACmcoMetadata: TCmcoDiagReportMetadata):
 begin
   Result := False;
   FCmcoMetadata := ACmcoMetadata;
-  if FindDiagReportAction() then
+  if FindDiagReportCmcoAction() then
   begin
     if FindDiagReportCmcoActionType() then
       Result := PrepareCmcoActionPropertyTypes()
@@ -283,7 +293,6 @@ function TMetadata.PrepareObservationCmcoPropertyType: Boolean;
 begin
   Result := False;
   var vTestId := GetObservationTestId();
-
   if vTestId <> null then
   begin
     if not FindObservationCmcoPropType(vTestId) then
@@ -291,6 +300,7 @@ begin
     else
       UpdateObservationPropType;
     AppendObservationMetadata();
+    Result := True;
   end
   else
     Logger.Error(SRbTestNotFound, [FObservation.CodeCoding.Code])

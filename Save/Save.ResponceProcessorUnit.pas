@@ -24,11 +24,7 @@ type
   strict private
     FBundle: TBundle;
     FCmco: TCmcoSaveDataModule;
-    FDiagreport: TDiagnosticReport;
     FLisResponce: TLisServiceResult;
-    FMisDocumentId: Variant;
-    FOrderId: string;
-    FOrderResponce: TOrderResponse;
     procedure ProcessOrder;
     procedure ProcessBundle;
     function ResponceIsOrder: Boolean;

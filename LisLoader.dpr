@@ -29,7 +29,8 @@ uses
   Load.CmcoLoadDataModuleUnit in 'Load\Load.CmcoLoadDataModuleUnit.pas' {CmcoLoadDataModule: TDataModule},
   Lib.ThreadObjectPoolUnit in '..\Lib\Lib.ThreadObjectPoolUnit.pas',
   Save.MetadataUnit in 'Save\Save.MetadataUnit.pas' {Metadata: TDataModule},
-  Save.ActionDataUnit in 'Save\Save.ActionDataUnit.pas' {ActionData: TDataModule};
+  Save.ActionDataUnit in 'Save\Save.ActionDataUnit.pas' {ActionData: TDataModule},
+  Save.CmcoDiagReportMetadataUnit in 'Save\Save.CmcoDiagReportMetadataUnit.pas';
 
 begin
   RegisterImplementations;

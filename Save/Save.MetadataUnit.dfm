@@ -9,8 +9,8 @@ object Metadata: TMetadata
       'FROM ActionType aty'
       'WHERE aty.deleted = 0'
       'AND aty.id = :ActionTypeId')
-    Left = 48
-    Top = 24
+    Left = 104
+    Top = 40
     ParamData = <
       item
         DataType = ftUnknown
@@ -20,8 +20,8 @@ object Metadata: TMetadata
   end
   object dsActionType: TDataSource
     DataSet = qryActionType
-    Left = 48
-    Top = 80
+    Left = 104
+    Top = 96
   end
   object qryPropType: TUniQuery
     Connection = CmcoSaveDataModule.conMain
@@ -32,8 +32,8 @@ object Metadata: TMetadata
     MasterSource = dsActionType
     MasterFields = 'id'
     DetailFields = 'actionType_id'
-    Left = 144
-    Top = 24
+    Left = 200
+    Top = 40
     ParamData = <
       item
         DataType = ftUnknown
@@ -43,8 +43,8 @@ object Metadata: TMetadata
   end
   object dsPropType: TDataSource
     DataSet = qryPropType
-    Left = 144
-    Top = 80
+    Left = 200
+    Top = 96
   end
   object qryUnit: TUniQuery
     Connection = CmcoSaveDataModule.conMain
@@ -52,8 +52,8 @@ object Metadata: TMetadata
       'SELECT *'
       'FROM rbUnit u'
       'WHERE u.code = :Code')
-    Left = 224
-    Top = 24
+    Left = 280
+    Top = 40
     ParamData = <
       item
         DataType = ftUnknown
@@ -63,8 +63,8 @@ object Metadata: TMetadata
   end
   object dsUnit: TDataSource
     DataSet = qryUnit
-    Left = 224
-    Top = 80
+    Left = 280
+    Top = 96
   end
   object qryTest: TUniQuery
     Connection = CmcoSaveDataModule.conMain
@@ -72,8 +72,8 @@ object Metadata: TMetadata
       'SELECT *'
       'FROM rbTest t'
       'WHERE t.code = :Code')
-    Left = 296
-    Top = 24
+    Left = 352
+    Top = 40
     ParamData = <
       item
         DataType = ftUnknown
@@ -83,8 +83,8 @@ object Metadata: TMetadata
   end
   object dsTest: TDataSource
     DataSet = qryTest
-    Left = 296
-    Top = 80
+    Left = 352
+    Top = 96
   end
   object qryActionLis: TUniQuery
     Connection = CmcoSaveDataModule.conMain
@@ -93,8 +93,8 @@ object Metadata: TMetadata
       'FROM s11.Action_LIS al '
       'WHERE al.diagnosticOrderLIS_id = :RequestUid'
       'AND al.order_id = :OrderId')
-    Left = 48
-    Top = 152
+    Left = 104
+    Top = 168
     ParamData = <
       item
         DataType = ftUnknown
@@ -109,7 +109,28 @@ object Metadata: TMetadata
   end
   object dsActionLis: TDataSource
     DataSet = qryActionLis
-    Left = 48
-    Top = 208
+    Left = 104
+    Top = 224
+  end
+  object qryAction: TUniQuery
+    Connection = CmcoSaveDataModule.conMain
+    SQL.Strings = (
+      'SELECT *'
+      'FROM Action a'
+      'WHERE a.deleted = 0'
+      'AND a.id = :ActionId')
+    Left = 200
+    Top = 168
+    ParamData = <
+      item
+        DataType = ftUnknown
+        Name = 'ActionId'
+        Value = nil
+      end>
+  end
+  object dsAction: TDataSource
+    DataSet = qryAction
+    Left = 200
+    Top = 224
   end
 end

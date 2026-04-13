@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Classes, Data.DB, MemDS, DBAccess, Uni,
   Lib.Data.DataSetHelperUnit, Lib.Data.UniConnectionHelperUnit,
-  Save.CmcoSaveDataModuleUnit, Load.FHIRModel, System.StrUtils;
+  Save.CmcoSaveDataModuleUnit, Load.FHIRModel, System.StrUtils,
+  Save.CmcoDiagReportMetadataUnit;
 
 type
   TActionData = class(TDataModule)
@@ -18,31 +19,22 @@ type
     procedure DataModuleDestroy(Sender: TObject);
     procedure qryActionBeforePost(DataSet: TDataSet);
   strict private
-    FActionType: Variant;
     FCmcoMetadata: TCmcoDiagReportMetadata;
+    FObservation: TObservation;
     FPropType: TCmcoPropType;
     function ServerDateTime: TDateTime;
     function UserId: Variant;
-  private
-    FActionId: Variant;
-    FBundle: TBundle;
-    FObservation: TObservation;
-    FOrderResponce: TOrderResponse;
-    FReport: TDiagnosticReport;
     procedure CreateObservationCmcoActionProp;
-    procedure CreateObservationCmcoPropValue;
     function FindObservationCmcoActionProp: Boolean;
-    function FindObservationCmcoPropValue: Boolean;
     function GetDiagReportDate: TDateTime;
     function GetObservationNormText: string;
-    procedure MarkCmcoActionClosed(AStatus: TCmcoActionStatus);
+    procedure SetCmcoActionStatus(AStatus: TCmcoActionStatus);
     procedure SaveCompletedDiagReportToCmcoAction;
     procedure SaveNotCompletedDiagReportToCmcoAction;
     procedure SaveObservationCmcoPropValue;
     procedure SaveObservationsToCmcoActionProperties;
     procedure SaveObservationToCmcoActionProperty;
     procedure UpdateObservationActionProp;
-    procedure UpdateObservationPropValue;
   protected
     procedure UpdateModifyMarkers(ADataSet: TDataSet);
   public
@@ -87,11 +79,6 @@ begin
   end;
 end;
 
-procedure TActionData.CreateObservationCmcoPropValue;
-begin
-  // TODO -cMM: TActionData.CreateObservationCmcoPropValue default body inserted
-end;
-
 procedure TActionData.DataModuleDestroy(Sender: TObject);
 begin
   ThreadObjectPool.RemoveObject(Self, False)
@@ -102,15 +89,9 @@ begin
   Result := qryActionProperty.Locate('type_id', FPropType.Id, []);
 end;
 
-function TActionData.FindObservationCmcoPropValue: Boolean;
-begin
-  Result := False;
-  // TODO -cMM: TActionData.FindObservationCmcoPropValue default body inserted
-end;
-
 function TActionData.GetDiagReportDate: TDateTime;
 begin
-  if not TryFHIRStrToDateTime(FReport.Issued, Result) then
+  if not TryFHIRStrToDateTime(FCmcoMetadata.DiagReport.Issued, Result) then
     Result := ServerDateTime;
 end;
 
@@ -135,10 +116,11 @@ begin
   end;
 end;
 
-procedure TActionData.MarkCmcoActionClosed(AStatus: TCmcoActionStatus);
+procedure TActionData.SetCmcoActionStatus(AStatus: TCmcoActionStatus);
 begin
   qryAction.EditFieldValues['status'] := Integer(AStatus);
-  qryAction.EditFieldValues['endDate'] := GetDiagReportDate();
+  if not (AStatus in [acsStarted, acsWaiting]) then
+    qryAction.EditFieldValues['endDate'] := GetDiagReportDate();
   qryAction.PostEx;
 end;
 
@@ -151,7 +133,7 @@ end;
 procedure TActionData.SaveCompletedDiagReportToCmcoAction;
 begin
   SaveObservationsToCmcoActionProperties();
-  MarkCmcoActionClosed(acsCompleted);
+  SetCmcoActionStatus(acsCompleted);
   UpdateModifyMarkers(qryAction);
 end;
 
@@ -176,8 +158,7 @@ var
   vTableName: string;
   vValue: Variant;
 begin
-  var vPropType := FCmcoMetadata.PropTypes[FObservation];
-  if AnsiSameText(vPropType.TypeName, 'String') then
+  if AnsiSameText(FPropType.TypeName, 'String') then
     vTableName := 'ActionProperty_String'
   else
     vTableName := 'ActionProperty_Double';
@@ -207,8 +188,8 @@ end;
 
 procedure TActionData.SaveObservationsToCmcoActionProperties;
 begin
-  for var vRef in FReport.Result do
-    if FBundle.TryFindResourceByFullUrl<TObservation>(vRef.Reference, FObservation) then
+  for var vRef in FCmcoMetadata.DiagReport.Result do
+    if FCmcoMetadata.Bundle.TryFindResourceByFullUrl<TObservation>(vRef.Reference, FObservation) then
       SaveObservationToCmcoActionProperty();
 end;
 
@@ -219,7 +200,6 @@ begin
     UpdateObservationActionProp()
   else
     CreateObservationCmcoActionProp();
-
   SaveObservationCmcoPropValue();
 end;
 
@@ -258,11 +238,6 @@ begin
 
     Post;
   end;
-end;
-
-procedure TActionData.UpdateObservationPropValue;
-begin
-  // TODO -cMM: TActionData.UpdateObservationPropValue default body inserted
 end;
 
 function TActionData.UserId: Variant;
